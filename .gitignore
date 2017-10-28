@@ -15,3 +15,7 @@ nbproject/
 /nbproject/
 /nbproject/private/
 /nbproject/private/private.properties
+
+web/app/composer.lock
+web/app/vendor
+data
