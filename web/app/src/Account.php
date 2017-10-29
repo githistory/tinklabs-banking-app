@@ -50,7 +50,6 @@ class Account {
     $this->sGetBalance->execute();
     $result = $this->sGetBalance->fetch(\PDO::FETCH_ASSOC);
 
-    if (!$result['balance']) throw new \Exception("balance not found for id ".$id);
     return $result['balance'];
   }
 
