@@ -20,7 +20,7 @@ $app->post('/account', function (Request $request, Response $response) {
   try {
     $result = (object)[
       'success' => true,
-      'message' => $this->account->openAccount($data['name'])
+      'message' => $this->account->openAccount($data['name'], $data['hkid'])
     ];
   } catch (Exception $e) {
     $result = (object)[

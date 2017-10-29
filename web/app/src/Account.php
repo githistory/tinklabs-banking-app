@@ -7,17 +7,20 @@ class Account {
     $this->db = $db;
     $this->sExists = $db->prepare("SELECT id FROM account WHERE id=:id");
     $this->sActive = $db->prepare("SELECT active FROM account WHERE id=:id");
-    $this->sOpenAccount = $db->prepare('INSERT INTO account (name, balance) VALUES (:name, :balance)');
+    $this->sOpenAccount = $db->prepare('INSERT INTO account (name, hkid, balance) VALUES (:name, :hkid, :balance)');
     $this->sToggleAccountStatus = $db->prepare("UPDATE account SET active=:active WHERE id=:id");
     $this->sGetBalance = $db->prepare("SELECT balance FROM account WHERE id=:id");
     $this->sSetBalance = $db->prepare("UPDATE account SET balance=:balance WHERE id=:id");
+    $this->sGetAccountOwner = $db->prepare("SELECT hkid FROM account WHERE id=:id");
   }
 
-  public function openAccount($name) {
+  public function openAccount($name, $hkid) {
     if (!$name) throw new \Exception('"name" is required');
+    if (!$hkid) throw new \Exception('"hkid" is required');
 
     $balance = 0;
     $this->sOpenAccount->bindParam(':name', $name, \PDO::PARAM_STR); // this sanitizes the input as well
+    $this->sOpenAccount->bindParam(':hkid', $hkid, \PDO::PARAM_STR);
     $this->sOpenAccount->bindParam(':balance', $balance, \PDO::PARAM_INT);
     $this->sOpenAccount->execute();
 
@@ -92,11 +95,26 @@ class Account {
     if ($this->isAccountClosed($from)) throw new \Exception('source account is already closed');
     if ($this->isAccountClosed($to)) throw new \Exception('target account is already closed');
 
-    $fromBalance = $this->getBalance($from);
-    if ($fromBalance<$amount) throw new \Exception('insufficient funds in source account');
+    // figure out owners
+    $fromOwner = $this->getAccountOwner($from);
+    $toOwner = $this->getAccountOwner($to);
 
+    // got approval?
+    if ($fromOwner!=$toOwner) {
+      $approval = \json_decode(\file_get_contents("http://handy.travel/test/success.json"));
+      if ($approval->status!='success') throw new \Exception('approval required for the transaction');
+    }
+
+    // figure out fee
+    $fee = $fromOwner==$toOwner ? 0 : 100;
+
+    // enough funds?
+    $fromBalance = $this->getBalance($from);
+    if ($fromBalance<$amount+$fee) throw new \Exception('insufficient funds in source account');
+
+    // do the thing
     $toBalance = $this->getBalance($to);
-    $newFromBalance = $fromBalance - $amount;
+    $newFromBalance = $fromBalance - $amount - $fee;
     $newToBalance = $toBalance + $amount;
     $this->db->beginTransaction();
     $this->sSetBalance->bindParam(':balance', $newFromBalance, \PDO::PARAM_INT);
@@ -127,5 +145,15 @@ class Account {
     $result = $this->sActive->fetch(\PDO::FETCH_ASSOC);
 
     return !$result['active'];
+  }
+
+  private function getAccountOwner($id) {
+    if (!$id) throw new \Exception('"id" is required');
+
+    $this->sGetAccountOwner->bindParam(':id', $id, \PDO::PARAM_INT);
+    $this->sGetAccountOwner->execute();
+    $result = $this->sGetAccountOwner->fetch(\PDO::FETCH_ASSOC);
+
+    return $result['hkid'];
   }
 }
